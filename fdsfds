@@ -1,0 +1,245 @@
+<?php
+
+//connexion BDD
+function connection()
+{
+    $db = new PDO('mysql:host=localhost; dbname=miniblog; charset=utf8; port=3306', 'root', '');
+    $db->query('SET NAMES utf8mb4');
+    return $db;
+}
+
+function head()
+{
+    echo '<meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link href="styles.css" rel="stylesheet" type="text/css"><link rel="apple-touch-icon" sizes="180x180" href="./img/apple-touch-icon.png"><link rel="icon" type="image/png" sizes="32x32" href="./img/favicon-32x32.png"><link rel="icon" type="image/png" sizes="16x16" href="./img/favicon-16x16.png"><link rel="manifest" href="./img/site.webmanifest"><script src="script.js" type="text/javascript"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.2/jquery.min.js" integrity="sha512-tWHlutFnuG0C6nQRlpvrEhE4QpkG1nn2MOUMWmUeRePl4e3Aki0VB6W1v3oLjFtd0hVOtRQ9PHpSfN6u6/QXkQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>';
+}
+
+// barre de navigation variable
+function navBar()
+{
+    echo '<nav><a href="index.php" style="font-size:1.5rem">&#128171;</a><div class="navbar"><a href="archives.php"><h3>Archives</h3></a>';
+    if (isset($_SESSION["username"])) {
+        echo "<a href='deconnexion.php'><h3>Déconnexion</h3></a>";
+    } else {
+        echo ('<a href="login.php"><h3>Connexion</h3></a><a href="inscription.php"><h3>Inscription</h3></a>');
+    };
+    echo '</div></nav>';
+}
+
+
+
+// COMPTES
+
+// login
+function logIn()
+{
+    $db = connection();
+    $db->query('SET NAMES utf8');
+
+    // requete non préparée :
+    // $requete="SELECT * FROM users WHERE username='".$_GET["username"]."'";
+    // $stmt=$db->query($requete);
+
+    // requete préparée :
+    $requete = "SELECT * FROM utilisateurs WHERE username=:username";
+    $stmt = $db->prepare($requete);
+    $stmt->bindParam(':username', $_POST["username"], PDO::PARAM_STR);
+    $stmt->execute();
+
+    if ($stmt->rowcount() == 1) {
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (password_verify($_POST["password"], $result["password"])) {
+            // echo "SUPER !!! vous etes connecté";
+            $_SESSION["username"] = $_POST["username"];
+            $_SESSION["id"] = $result["id"];
+            // echo '<br><a href="affiche_utilisateurs.php">afficher les utilisateurs</a>';
+            header('Location:index.php');
+        } else {
+            header('Location:login.php?err=password');
+        }
+    } else {
+        header('Location:login.php?err=username');
+    }
+
+    // if (isset($_SESSION["username"])) {
+    // 	echo "<p>Compte: {$_SESSION["username"]} </p><a href='deconnexion.php'>Déconnexion</a> <BR>";
+    // }
+}
+
+
+
+// inscription
+
+function signIn()
+{
+    $db = connection();
+    $requete = "INSERT INTO utilisateurs VALUES (NULL,:nom,:prenom,:username,:password)";
+
+    $stmt = $db->prepare($requete);
+    $stmt->bindParam(':nom', $_POST["nom"], PDO::PARAM_STR);
+    $stmt->bindParam(':prenom', $_POST["prenom"], PDO::PARAM_STR);
+    $stmt->bindParam(':username', $_POST["username"], PDO::PARAM_STR);
+    $hash = password_hash($_POST["password"], PASSWORD_DEFAULT);
+    $stmt->bindParam(':password', $hash, PDO::PARAM_STR);
+    $stmt->execute();
+    header('Location:login.php');
+
+    // echo "L'inscription s est bien deroulee<br>";
+    // echo '<br><a href="affiche_utilisateurs.php">afficher les utilisateurs</a>';
+
+    if (isset($_SESSION["username"])) {
+        echo "<p>Compte: {$_SESSION["username"]} </p><a href='deconnexion.php'>Déconnexion</a> <BR>";
+    }
+}
+
+
+
+// ARTICLES
+
+// afficher les billets
+function afficheArchives()
+{
+    $db = connection();
+    $requete = "SELECT * FROM billets, utilisateurs WHERE billets.auteur=utilisateurs.username ORDER BY id_billet DESC";
+    $stmt = $db->prepare($requete);
+    $stmt->execute();
+    $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($result as $value) {
+        echo '<a class="article" href="commentaires.php?billet=' . $value["id_billet"] . '">' .
+            '<article>' .
+            '<h2>' . $value["titre"] . '</h2>' .
+            '<h6>Publié le ' . date('M d, Y', strtotime($value["date_creation"])) . " par " . $value["auteur"] . '</h6>' .
+            '<p>' . mb_strimwidth($value["contenu"], 0, 100, "...") . '</p>' .
+            '</article>' .
+            '</a>';
+    }
+};
+
+// afficher les 3 derniers billets
+function afficheDerniersArticles()
+{
+    $db = connection();
+    $requete = "SELECT * FROM billets, utilisateurs WHERE billets.auteur=utilisateurs.username ORDER BY id_billet DESC LIMIT 3";
+    $stmt = $db->prepare($requete);
+    $stmt->execute();
+    $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    return $result;
+};
+// afficher les détails de l'article sélectionné
+function afficheDetailArticle()
+{
+    $db = connection();
+    $requete = "SELECT * FROM billets, utilisateurs WHERE " . $_GET['billet'] . "=billets.id_billet AND billets.auteur=utilisateurs.username";
+    $stmt = $db->prepare($requete);
+    $stmt->execute();
+    $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($result as $value) {
+        echo
+        '<article><h2>' . $value["titre"] . '</h2>' .
+            '<h6>Publié le ' . date('M d, Y', strtotime($value["date_creation"])) . " par " . $value["auteur"] . '</h6>' .
+            '<p>' . $value["contenu"] . '</p></article>';
+    }
+}
+
+// ecrire un article
+function ecrireArticle()
+{
+    echo '<form class="newarticle" name="article" method="POST" action="new.php"><label for="titre">Titre</label><input type="text" id="titre" name="titre" placeholder="Titre" require><label for="contenu">Contenu</label><textarea id="contenu" name="contenu" placeholder="Contenu" require></textarea><input type="submit" id="publier" name="publier" value="Publier"><input type="reset" value="Effacer"></form>';
+}
+
+// insérer un nouveau billet dans la base de données
+function insertArticle($titre, $contenu, $auteur)
+{
+    $db = connection();
+    $auteur = $_SESSION['username'];
+    $titre = $_POST['titre'];
+    $contenu = $_POST['contenu'];
+    $insert = "INSERT INTO billets (id_billet, titre, contenu, auteur, date_creation) VALUES (NULL,'$titre','$contenu','$auteur', Now())";
+    $db->query($insert);
+};
+
+
+
+
+
+
+// COMMENTAIRES
+
+// formulaire de commentaires si utilisateur connecté
+function formCommentaire()
+{
+    echo '<form name="commentaires" method="POST" action="commentaires.php?billet=' . $_GET["billet"] . '"><textarea id="contenu" name="commentaire" placeholder="Commentez ici..." require></textarea><input type="submit" id="publier" name="commenter" value="Publier votre commentaire"></form>';
+}
+
+
+// afficher les commentaires
+function afficheCommentaires($billet)
+{
+    $db = connection();
+    $requete = 'SELECT * FROM commentaires, billets, utilisateurs WHERE ' . $_GET["billet"] . '=billets.id_billet AND billets.id_billet=commentaires.ext_billet AND commentaires.auteur=utilisateurs.username ORDER BY commentaires.id DESC';
+    $stmt = $db->prepare($requete);
+    $stmt->execute();
+    // return $result;
+    $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+
+    foreach ($result as $value) {
+        echo
+        '<div class="commentaire">' .
+            '<h6>Publié le ' . date('M d, Y', strtotime($value["date_commentaire"])) . " par " . $value["username"] . '</h6>' .
+            '<p>' . $value["commentaire"] . '</p>' .
+            '</div>';
+    };
+    if ($result == false) {
+        echo '<div class="commentaire"><p>Pas de commentaires pour le moment. Soyez le premier.</p></div>';
+    };
+};
+
+// insérer les commentaires dans la base de données
+function insertCommentaires($contenu, $auteur, $ext)
+{
+    $db = connection();
+    $auteur = $_SESSION["username"];
+    $contenu = $_POST["commentaire"];
+    $ext = $_GET["billet"];
+    $insert = "INSERT INTO commentaires (id, ext_billet, auteur, commentaire, date_commentaire) VALUES (NULL,\"$ext\",\"$auteur\",\"$contenu\", Now())";
+    $db->query($insert);
+};
+
+
+function afficheNombreCommentaires()
+{
+    $db = connection();
+    $requete = $db->query("SELECT COUNT(*) as commentaires FROM commentaires WHERE ext_billet=" . $_GET['billet']);
+
+    $donnees = $requete->fetch();
+    // $requete->closeCursor();
+    echo '<h3>' . $donnees["commentaires"] . ' commentaires</h3>';
+}
+
+
+function backOfficeTable()
+{
+    $db = connection();
+    $requete = 'SELECT * FROM billets ORDER BY date_creation DESC';
+    $stmt = $db->query($requete);
+    $resultat = $stmt->fetchall(PDO::FETCH_ASSOC);
+
+    foreach ($resultat as $row) {
+        echo '<tr>';
+        echo '<td>' . $row['id_billet'] . '</td>';
+        echo '<td><b>' . $row['titre'] . '</b></td>';
+        echo '<td>' . mb_strimwidth($row["contenu"], 0, 60, "...") . '</td>';
+        echo '<td>&#128081;&nbsp;' . $row['auteur'] . '</td>';
+        echo '<td>' . $row['date_creation'] . '</td>';
+        echo '<td><div style="display:flex; gap:1rem"><a type="button" class="btn btn-xs btn-info" href="read.php?billet=' . $row['id_billet'] . '" >&#128065;</a>';
+        echo '<a type="button" class="btn btn-xs btn-warning" href="edit.php?action=edit & id=' . $row['id_billet'] . '">&#9998;</a>';
+        echo '<a type="button" class="btn btn-xs btn-danger" onclick="return confirm(`Êtes-vous sûr de vouloir supprimer l\'article ?`)" href="delete.php?type=billet&delete & id=' . $row['id_billet'] . '">&#128465;</a></div></td>';
+        echo '</tr>';
+    };
+}
+
+function supprimerArticle()
+{
+    echo '<div id="popup" class="overlay"><div class="note"><p>Êtes-vous sûr de vouloir supprimer l\'article ?</p><br><a class="lien" onclick="closePopup()">Non, plus trop sûr(e) en fait...</a>&#160;&#160;&#160;&#160;&#160;<a type="button" class="btn btn-danger" href="delete.php?type=billet&delete & id=' . $_GET['billet'] . '">Oui, je veux supprimer cet article</a></div></div>';
+}
